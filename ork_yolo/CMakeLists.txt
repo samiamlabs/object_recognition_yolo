@@ -1,7 +1,6 @@
 cmake_minimum_required(VERSION 2.8.12)
 project(object_recognition_yolo)
 
-# add_compile_options(-std=c++11)
 set(CMAKE_CXX_FLAGS "-std=c++11 ${CMAKE_CXX_FLAGS}")
 
 # Define path of darknet folder here.
@@ -36,9 +35,6 @@ include_directories(
     ${catkin_INCLUDE_DIRS}
     ${OpenCV_INCLUDE_DIRS}
 )
-
-  # src/YoloObjectDetector.cpp
-  # src/image_interface.c
 
 add_library(${PROJECT_NAME}_lib
 
@@ -87,16 +83,6 @@ add_library(${PROJECT_NAME}_lib
   ${DARKNET_PATH}/src/utils.c
   ${DARKNET_PATH}/src/yolo_layer.c
 
-  # ${DARKNET_PATH}/examples/art.c                ${DARKNET_PATH}/examples/regressor.c
-  # ${DARKNET_PATH}/examples/captcha.c            ${DARKNET_PATH}/examples/rnn.c
-  # ${DARKNET_PATH}/examples/cifar.c              ${DARKNET_PATH}/examples/rnn_vid.c
-  # ${DARKNET_PATH}/examples/classifier.c         ${DARKNET_PATH}/examples/segmenter.c
-  # ${DARKNET_PATH}/examples/coco.c               ${DARKNET_PATH}/examples/super.c
-  # ${DARKNET_PATH}/examples/detector.c           ${DARKNET_PATH}/examples/swag.c
-  # ${DARKNET_PATH}/examples/dice.c               ${DARKNET_PATH}/examples/tag.c
-  # ${DARKNET_PATH}/examples/go.c                 ${DARKNET_PATH}/examples/voxel.c
-  # ${DARKNET_PATH}/examples/lsd.c                ${DARKNET_PATH}/examples/writing.c
-  # ${DARKNET_PATH}/examples/nightmare.c          ${DARKNET_PATH}/examples/yolo.c
 )
 
 target_link_libraries(${PROJECT_NAME}_lib
@@ -108,18 +94,6 @@ target_link_libraries(${PROJECT_NAME}_lib
   ${catkin_LIBRARIES}
   ${OpenCV_LIBS}
 )
-
-# add_executable(${PROJECT_NAME}
-#   src/yolo_object_detector_node.cpp
-# )
-
-# target_link_libraries(${PROJECT_NAME}
-#   ${PROJECT_NAME}_lib
-# )
-
-# add_dependencies(
-#   ${PROJECT_NAME}_lib
-# )
 
 # Compile the module
 add_subdirectory(python)

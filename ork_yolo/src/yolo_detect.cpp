@@ -26,13 +26,7 @@ namespace ecto_yolo {
 
 struct Detector {
 
-  // virtual void parameter_callback(
-  //     const object_recognition_core::db::Documents &db_documents) {}
-
-  // virtual void parameterCallbackJsonDb(const std::string &json_db) {}
-
   static void declare_params(ecto::tendrils &params) {
-    // object_recognition_core::db::bases::declare_params_impl(params, "mesh");
 
     params.declare(&Detector::network_config_, "network_config", "Path to network config file.",
                    "/home/sam/OrkData/cfg/tiny-yolo-voc.cfg");
@@ -46,8 +40,9 @@ struct Detector {
     params.declare(&Detector::detection_threshold_, "detection_threshold",
                    "Threshold for detection.", 0.5);
 
-    params.declare(&Detector::nms_, "nms",
-                   "Non-maximum supression.", 0.45);
+    params.declare(&Detector::nms_, "nms", "Non-maximum supression.", 0.45);
+
+    params.declare(&Detector::visualize_, "visualize", "Visualize with openCV.", true);
   }
 
   static void declare_io(const tendrils &params, tendrils &inputs, tendrils &outputs) {
@@ -69,13 +64,13 @@ struct Detector {
 
   void configure(const tendrils &params, const tendrils &inputs, const tendrils &outputs) {
 
-    read_data_config();
+    readDataConfig();
     setupNetwork();
-    allocate_variables();
+    allocateVariables();
 
   }
 
-  void allocate_variables() {
+  void allocateVariables() {
 
     layer l = net_->layers[net_->n - 1];
 
@@ -86,7 +81,7 @@ struct Detector {
       probabilities[i] = (float *)calloc(l.classes + 1, sizeof(float));
   }
 
-  void read_data_config() {
+  void readDataConfig() {
     char *data_config_ptr = new char[data_config_->length() + 1];
     strcpy(data_config_ptr, data_config_->c_str());
 
@@ -122,18 +117,17 @@ struct Detector {
   }
 
   int process(const tendrils &inputs, const tendrils &outputs) {
-    std::cout << "Process start...\n";
     clearOutputs();
 
     updateImage();
     detect();
-    visualize();
 
-    std::cout << "Process end...\n";
+    if(*visualize_) visualize();
+
     return ecto::OK;
   }
 
-  void ipl_into_image(IplImage *src, image &im) {
+  void iplIntoImage(IplImage *src, image &im) {
     unsigned char *data = (unsigned char *)src->imageData;
     int h = src->height;
     int w = src->width;
@@ -150,31 +144,31 @@ struct Detector {
     }
   }
 
-  image ipl_to_image(IplImage *src) {
+  image iplToImage(IplImage *src) {
     int h = src->height;
     int w = src->width;
     int c = src->nChannels;
     image out = make_image(w, h, c);
-    ipl_into_image(src, out);
+    iplIntoImage(src, out);
     return out;
   }
 
   void updateImage() {
     IplImage *ipl_img = new IplImage(*image_);
-    // TODO: use ipl_into_image when size is the same as last image?
-    yolo_image_ = ipl_to_image(ipl_img);
+    // TODO: use iplIntoImage when size is the same as last image?
+    yolo_image_ = iplToImage(ipl_img);
     rgbgr_image(yolo_image_);
     yolo_image_letterbox_ = letterbox_image(yolo_image_, net_->w, net_->h);
     // letterbox_image_into(yolo_image_, net_->w, net_->h, yolo_image_letterbox_);
   }
 
   void addObjectName(std::string name) {
-    std::cout << boost::format("Object name: %s\n") % name;
+    // std::cout << boost::format("Object name: %s\n") % name;
     detected_objects_->push_back(name);
   }
 
   void addProbability(float probability) {
-    std::cout << boost::format("Probability: %f\n") % probability;
+    // std::cout << boost::format("Probability: %f\n") % probability;
     probabilities_->push_back(probability);
   }
 
@@ -185,19 +179,15 @@ struct Detector {
     int width = relative_width * image_->cols;
     int height = relative_height * image_->rows;
 
-    std::cout << boost::format(
-      "Adding bounding box, x: %f, y: %f, height: %f, width: %f\n")
-      % x % y % height % width;
+    // std::cout << boost::format(
+    //   "Adding bounding box, x: %f, y: %f, height: %f, width: %f\n")
+    //   % x % y % height % width;
 
     cv::Rect bounding_box(x, y, width, height);
     bounding_boxes_->push_back(bounding_box);
   }
 
   void detect() {
-    // Non-maximum suppression
-    // image **alphabet_ptr_ = load_alphabet();
-    // char **names = get_labels(*names_);
-
     layer l = net_->layers[net_->n - 1];
     float *X = yolo_image_letterbox_.data;
 
@@ -212,8 +202,9 @@ struct Detector {
         net_, yolo_image_.w, yolo_image_.h, *detection_threshold_,
         hierarchy_threshold_, 0, 1, &nboxes);
 
-    if (*nms_ < 0)
+    if (*nms_ > 0.0) {
       do_nms_sort(detections, nboxes, l.classes, *nms_);
+    }
 
     for(int box_index = 0; box_index < nboxes; ++box_index) {
 
@@ -312,6 +303,7 @@ private:
   ecto::spore<std::string> network_config_;
   ecto::spore<std::string> data_config_;
   ecto::spore<float> nms_;
+  ecto::spore<bool> visualize_;
 
   ecto::spore<float> detection_threshold_;
 };
