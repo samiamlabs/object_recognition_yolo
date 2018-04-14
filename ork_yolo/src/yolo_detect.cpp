@@ -15,7 +15,9 @@
 #include <opencv2/imgproc/imgproc.hpp>
 
 extern "C" {
+#undef __cplusplus
 #include "darknet.h"
+#define __cplusplus
 }
 
 using object_recognition_core::common::PoseResult;
