@@ -1,0 +1,13 @@
+# Blender MTL File: 'tumblerglass.blend'
+# Material Count: 1
+
+newmtl wineglass_phong1
+Ns 19.607843
+Ka 0.500000 0.500000 0.500000
+Kd 0.499168 0.549348 0.800000
+Ks 0.250000 0.250000 0.250000
+Ke 0.000000 0.000000 0.000000
+Ni 1.000000
+d 1.000000
+illum 3
+map_Kd purple.jpg
