@@ -4,11 +4,17 @@ import ecto_ros
 import ecto_ros.ecto_sensor_msgs as ecto_sensor_msgs
 
 from ecto_opencv import imgproc, highgui
+from ecto_opencv.highgui import ImageReader
 import object_recognition_yolo.ecto_cells.ecto_yolo as ecto_yolo
 from object_recognition_core.db.tools import interpret_object_ids
 
 import argparse
 from ecto.opts import scheduler_options, run_plasm
+
+import os
+
+from ecto_opencv.calib import PoseDrawer
+from ecto_opencv.highgui import MatPrinter
 
 class TestCell(ecto.cell.Cell):
     @staticmethod
@@ -47,10 +53,12 @@ test_cell = TestCell()
 trainer = ecto_yolo.Trainer()
 training_image_saver = ecto_yolo.TrainingImageSaver()
 
+observation_renderer  = ecto_yolo.ObservationRenderer()
+
 json_db_str = '{"type": "CouchDB", "root": "http://localhost:5984", "collection": "object_recognition"}'
 json_db = ecto.Constant(value=json_db_str)
 
-object_id_str = '3fa57d1921eae374aca7334728014a8e'
+object_id_str = '4680aac58c1d263b9449d57bd2000f27'
 object_id = ecto.Constant(value=object_id_str)
 
 ImageBagger = ecto_sensor_msgs.Bagger_Image
@@ -65,6 +73,10 @@ baggers = dict(image=ImageBagger(topic_name='/hsrb/head_rgbd_sensor/rgb/image_ra
                image_ci=CameraInfoBagger(topic_name='/hsrb/head_rgbd_sensor/rgb/camera_info'),
                )
 
+# this will read all images in the path
+path = '/home/sam/Code/vision/VOCdevkit/VOC2012/JPEGImages'
+file_source = ImageReader(path=os.path.expanduser(path))
+
 sync = ecto_ros.BagReader('Bag Reader',
                           baggers=baggers,
                           bag=bag,
@@ -73,25 +85,55 @@ sync = ecto_ros.BagReader('Bag Reader',
 
 rgb = imgproc.cvtColor('bgr -> rgb', flag=imgproc.Conversion.BGR2RGB)
 
-display = highgui.imshow(name='Training Data')
+display = highgui.imshow(name='Training Data', waitKey=10000)
 
 image_mux = ecto_yolo.ImageMux()
 
 graph = []
 
+# graph += [
+#             sync['image'] >> image['image'],
+#             image[:] >> rgb[:],
+#             file_source['image'] >> image_mux['image1'],
+#             rgb['image'] >> image_mux['image2'],
+#             image_mux['image_out'] >> observation_renderer['image'],
+#         ]
+
 graph += [
             sync['image'] >> image['image'],
             image[:] >> rgb[:],
-            test_cell['object_id'] >> trainer['object_id'],
-            json_db['out'] >> trainer['json_db'],
-            rgb[:] >> image_mux['image'],
-            image_mux['image_out'] >> trainer['image'],
-            trainer['box_labels', 'color_images'] >> training_image_saver['box_labels', 'color_images'],
-            test_cell['object_id_index'] >> training_image_saver['object_id_index'],
+            rgb['image'] >> observation_renderer['image'],
+            json_db['out'] >> observation_renderer['json_db'],
+        ]
+
+# graph += [
+#             object_id['out'] >> observation_renderer['object_id'],
+#          ]
+
+graph += [
+            test_cell['object_id'] >> observation_renderer['object_id'],
          ]
 
+            # observation_renderer['debug_image'] >> display['image'],
+            # test_cell['object_id'] >> trainer['object_id'],
+            # json_db['out'] >> trainer['json_db'],
+            # image_mux['image_out'] >> trainer['image'],
+            # test_cell['object_id_index'] >> training_image_saver['object_id_index'],
+            # image_mux['image_out'] >> display['image'],
+            # rgb['image'] >> display['image'],
+            # trainer['box_labels', 'color_images'] >> training_image_saver['box_labels', 'color_images'],
             # trainer['debug_image'] >> display['image'],
-            # object_id['out'] >> trainer['object_id'],
+
+pose_drawer = PoseDrawer()
+
+graph += [
+            observation_renderer['R'] >> MatPrinter(name='R')['mat'],
+            observation_renderer['T'] >> MatPrinter(name='T')['mat'],
+            observation_renderer['K'] >> MatPrinter(name='K')['mat'],
+            observation_renderer['R', 'T', 'K'] >> pose_drawer['R', 'T', 'K'],
+            observation_renderer['debug_image'] >> pose_drawer['image'],
+            pose_drawer['output'] >> display['image'],
+        ]
 
 plasm = ecto.Plasm()
 plasm.connect(graph)
@@ -99,6 +141,7 @@ plasm.connect(graph)
 # sched = ecto.Scheduler(plasm)
 # sched.execute(niter=1)
 
+ecto.view_plasm(plasm)
 
 # add ecto scheduler args.
 scheduler_options(parser)

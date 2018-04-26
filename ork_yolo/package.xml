@@ -5,16 +5,18 @@
   <author email="samuellindgren91@gmail.com">Samuel Lindgren</author>
   <maintainer email="samuellindgren91@gmail.com">Samuel Lindgren</maintainer>
   <license>BSD</license>
-  
+
   <build_depend>ecto</build_depend>
   <build_depend>object_recognition_core</build_depend>
   <build_depend>object_recognition_renderer</build_depend>
   <build_depend>opencv_candidate</build_depend>
+  <build_depend>eigen</build_depend>
 
   <run_depend>ecto</run_depend>
   <run_depend>object_recognition_core</run_depend>
   <run_depend>object_recognition_renderer</run_depend>
   <run_depend>opencv_candidate</run_depend>
+  <run_depend>eigen</run_depend>
 
   <buildtool_depend>catkin</buildtool_depend>
 </package>

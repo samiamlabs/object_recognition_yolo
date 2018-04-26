@@ -19,7 +19,7 @@ import object_recognition_yolo.ecto_cells.ecto_yolo as ecto_yolo
 
 parser = argparse.ArgumentParser(description='Test detection.')
 
-bag = "/home/sam/rosbags/sigverse/no_objects.bag"
+bag = "/home/sam/rosbags/sigverse/stroll.bag"
 ImageBagger = ecto_sensor_msgs.Bagger_Image
 CameraInfoBagger = ecto_sensor_msgs.Bagger_CameraInfo
 baggers = dict(
@@ -38,8 +38,12 @@ image = ecto_ros.Image2Mat()
 rgb = imgproc.cvtColor('bgr -> rgb', flag=imgproc.Conversion.BGR2RGB)
 display = imshow(name='RGB', triggers=dict(save=ord('s')))
 
-json_db_str = '{"type": "CouchDB", "root": "http://localhost:5984", "collection": "object_recognition"}'
-detector = ecto_yolo.Detector(json_db=json_db_str)
+detector = ecto_yolo.Detector(
+    data_config="/home/sam/OrkData/cfg/ork.dataset",
+    network_config="/home/sam/OrkData/cfg/yolov3-ork.cfg",
+    weights="/home/sam/OrkData/weights/yolov3-ork_34000.weights",
+    detection_threshold=0.2,
+)
 
 # ecto options
 scheduler_options(parser)

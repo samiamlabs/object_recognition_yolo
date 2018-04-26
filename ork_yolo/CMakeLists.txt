@@ -5,6 +5,8 @@ option(CUDNN "Enable CuDNN" ON)
 
 set(CMAKE_CXX_FLAGS "-std=c++11 ${CMAKE_CXX_FLAGS}")
 
+set(CMAKE_CXX_FLAGS "-fopenmp ${CMAKE_CXX_FLAGS}")
+
 # Define path of darknet folder here.
 find_path(DARKNET_PATH
   NAMES "README.md"
