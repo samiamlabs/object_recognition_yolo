@@ -61,23 +61,29 @@ json_db = ecto.Constant(value=json_db_str)
 object_id_str = '4680aac58c1d263b9449d57bd2000f27'
 object_id = ecto.Constant(value=object_id_str)
 
+frame_id_str = 'camera_optical_frame'
+frame_id = ecto.Constant(value=frame_id_str)
+
 ImageBagger = ecto_sensor_msgs.Bagger_Image
 CameraInfoBagger = ecto_sensor_msgs.Bagger_CameraInfo
 
 image_ci = ecto_ros.CameraInfo2Cv('camera_info -> cv::Mat')
 image = ecto_ros.Image2Mat()
+depth = ecto_ros.Image2Mat()
 
 bag = "/home/sam/rosbags/sigverse/no_objects.bag"
 
-baggers = dict(image=ImageBagger(topic_name='/hsrb/head_rgbd_sensor/rgb/image_raw'),
-               image_ci=CameraInfoBagger(topic_name='/hsrb/head_rgbd_sensor/rgb/camera_info'),
-               )
+baggers = dict(
+    image=ImageBagger(topic_name='/hsrb/head_rgbd_sensor/rgb/image_raw'),
+    image_ci=CameraInfoBagger(topic_name='/hsrb/head_rgbd_sensor/rgb/camera_info'),
+    depth=ImageBagger(topic_name='/hsrb/head_rgbd_sensor/depth/image_raw'),
+)
 
 # this will read all images in the path
 path = '/home/sam/Code/vision/VOCdevkit/VOC2012/JPEGImages'
 file_source = ImageReader(path=os.path.expanduser(path))
 
-sync = ecto_ros.BagReader('Bag Reader',
+bag_reader = ecto_ros.BagReader('Bag Reader',
                           baggers=baggers,
                           bag=bag,
                           random_access=True,
@@ -89,22 +95,33 @@ display = highgui.imshow(name='Training Data', waitKey=10000)
 
 image_mux = ecto_yolo.ImageMux()
 
+pose_drawer = PoseDrawer()
+
+rt_2_pose = ecto_ros.RT2PoseStamped(frame_id=frame_id_str)
+
 graph = []
 
-# graph += [
-#             sync['image'] >> image['image'],
-#             image[:] >> rgb[:],
-#             file_source['image'] >> image_mux['image1'],
-#             rgb['image'] >> image_mux['image2'],
-#             image_mux['image_out'] >> observation_renderer['image'],
-#         ]
-
 graph += [
-            sync['image'] >> image['image'],
+            bag_reader['image'] >> image['image'],
+            bag_reader['depth'] >> depth['image'],
             image[:] >> rgb[:],
-            rgb['image'] >> observation_renderer['image'],
+            bag_reader['image_ci'] >> image_ci['camera_info'],
+            image_ci['K'] >> image_mux['K1'],
+            image_mux['K'] >> observation_renderer['K'],
+            rgb['image'] >> image_mux['image1'],
+            depth['image'] >> image_mux['depth1'],
+            file_source['image'] >> image_mux['image2'],
+            image_mux['image'] >> observation_renderer['image'],
+            image_mux['depth'] >> observation_renderer['depth'],
             json_db['out'] >> observation_renderer['json_db'],
         ]
+
+# graph += [
+#             bag_reader['image'] >> image['image'],
+#             image[:] >> rgb[:],
+#             rgb['image'] >> observation_renderer['image'],
+#             json_db['out'] >> observation_renderer['json_db'],
+#         ]
 
 # graph += [
 #             object_id['out'] >> observation_renderer['object_id'],
@@ -114,17 +131,6 @@ graph += [
             test_cell['object_id'] >> observation_renderer['object_id'],
          ]
 
-            # observation_renderer['debug_image'] >> display['image'],
-            # test_cell['object_id'] >> trainer['object_id'],
-            # json_db['out'] >> trainer['json_db'],
-            # image_mux['image_out'] >> trainer['image'],
-            # test_cell['object_id_index'] >> training_image_saver['object_id_index'],
-            # image_mux['image_out'] >> display['image'],
-            # rgb['image'] >> display['image'],
-            # trainer['box_labels', 'color_images'] >> training_image_saver['box_labels', 'color_images'],
-            # trainer['debug_image'] >> display['image'],
-
-pose_drawer = PoseDrawer()
 
 graph += [
             observation_renderer['R'] >> MatPrinter(name='R')['mat'],
@@ -134,6 +140,11 @@ graph += [
             observation_renderer['debug_image'] >> pose_drawer['image'],
             pose_drawer['output'] >> display['image'],
         ]
+
+graph += [
+            observation_renderer['R', 'T'] >> rt_2_pose['R', 'T'],
+         ]
+            # frame_id['out'] >> rt_2_pose['frame_id'],
 
 plasm = ecto.Plasm()
 plasm.connect(graph)

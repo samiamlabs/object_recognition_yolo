@@ -33,7 +33,13 @@ struct ImageMux {
     inputs.declare(&ImageMux::image1_, "image1", "Rgb full image.");
     inputs.declare(&ImageMux::image2_, "image2", "Rgb full image.");
 
-    outputs.declare(&ImageMux::image_out_, "image_out", "Rgb full image output.");
+    inputs.declare(&ImageMux::depth1_, "depth1", "Depth full image.");
+
+    inputs.declare(&ImageMux::K1_, "K1", "Camera intrinsic matrix.");
+
+    outputs.declare(&ImageMux::image_out_, "image", "Rgb full image output.");
+    outputs.declare(&ImageMux::depth_out_, "depth", "Depth full image output.");
+    outputs.declare(&ImageMux::K_out_, "K", "Camera intrinsic matrix.");
 
   }
 
@@ -48,8 +54,25 @@ struct ImageMux {
 
     if (random_float < file_percentage) {
       image1_->copyTo(*image_out_);
+      depth1_->copyTo(*depth_out_);
+      K1_->copyTo(*K_out_);
     } else {
       image2_->copyTo(*image_out_);
+      //FIXME: generate depth somehow instaid of using empty matrix
+      cv::Mat depth(image2_->rows, image2_->cols, CV_16U, cv::Scalar(0));
+      depth.copyTo(*depth_out_);
+
+      float focal_length_x = 525.0;
+      float focal_length_y = 525.0;
+
+      float principal_point_x = image2_->cols/2;
+      float principal_point_y = image2_->rows/2;
+
+      cv::Mat K = (
+        cv::Mat_<float>(3, 3) << focal_length_x, 0.0, principal_point_x,
+                                0.0, focal_length_y, principal_point_y,
+                                0.0, 0.0, 1.0);
+      K.copyTo(*K_out_);
     }
 
     return ecto::OK;
@@ -59,7 +82,15 @@ struct ImageMux {
 
   ecto::spore<cv::Mat> image1_;
   ecto::spore<cv::Mat> image2_;
+
+  ecto::spore<cv::Mat> depth1_;
+
+  ecto::spore<cv::Mat> K1_;
+
   ecto::spore<cv::Mat> image_out_;
+  ecto::spore<cv::Mat> depth_out_;
+
+  ecto::spore<cv::Mat> K_out_;
 };
 } // namespace ecto_yolo
 
