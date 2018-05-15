@@ -26,6 +26,13 @@ from ecto_image_pipeline.base import RescaledRegisteredDepth
 import ecto_pcl
 import ecto_pcl_ros
 
+from object_recognition_core.db import tools, models
+from object_recognition_core.db.cells import ObservationInserter
+
+import couchdb
+import object_recognition_core.db.tools as dbtools
+from object_recognition_core.db.tools import args_to_db_params
+
 
 class IdDispatcher(ecto.cell.Cell):
     @staticmethod
@@ -34,8 +41,10 @@ class IdDispatcher(ecto.cell.Cell):
 
     @staticmethod
     def declare_io(params, inputs, outputs):
-        outputs.declare("object_id", "The object id, to associate this model with", "123")
-        outputs.declare("object_id_index", "The object id index, to associate this model with", 0)
+        outputs.declare(
+            "object_id", "The object id, to associate this model with", "123")
+        outputs.declare("object_id_index",
+                        "The object id index, to associate this model with", 0)
 
     def configure(self, params, inputs, outputs):
         json_db_str = '{"type": "CouchDB", "root": "http://localhost:5984", "collection": "object_recognition"}'
@@ -56,10 +65,12 @@ class IdDispatcher(ecto.cell.Cell):
         self.object_id_index += 1
         return 0
 
+
 class ObservationRenderer():
     def __init__(self):
         self.graph = []
 
+        self.parse_args()
         self.connect_background_source()
         self.connect_renderer()
 
@@ -80,9 +91,12 @@ class ObservationRenderer():
         CameraInfoBagger = ecto_sensor_msgs.Bagger_CameraInfo
 
         baggers = dict(
-            image=ImageBagger(topic_name='/hsrb/head_rgbd_sensor/rgb/image_raw'),
-            image_ci=CameraInfoBagger(topic_name='/hsrb/head_rgbd_sensor/rgb/camera_info'),
-            depth=ImageBagger(topic_name='/hsrb/head_rgbd_sensor/depth/image_raw'),
+            image=ImageBagger(
+                topic_name='/hsrb/head_rgbd_sensor/rgb/image_raw'),
+            image_ci=CameraInfoBagger(
+                topic_name='/hsrb/head_rgbd_sensor/rgb/camera_info'),
+            depth=ImageBagger(
+                topic_name='/hsrb/head_rgbd_sensor/depth/image_raw'),
         )
 
         # this will read all images in the path
@@ -90,12 +104,13 @@ class ObservationRenderer():
         self.file_source = ImageReader(path=os.path.expanduser(path))
 
         self.bag_reader = ecto_ros.BagReader('Bag Reader',
-                                  baggers=baggers,
-                                  bag=bag,
-                                  random_access=True,
-                                  )
+                                             baggers=baggers,
+                                             bag=bag,
+                                             random_access=True,
+                                             )
 
-        self.rgb = imgproc.cvtColor('bgr -> rgb', flag=imgproc.Conversion.BGR2RGB)
+        self.rgb = imgproc.cvtColor(
+            'bgr -> rgb', flag=imgproc.Conversion.BGR2RGB)
         self.display = highgui.imshow(name='Training Data', waitKey=10000)
         self.image_mux = ecto_yolo.ImageMux()
 
@@ -112,7 +127,7 @@ class ObservationRenderer():
 
     def connect_renderer(self):
         self.id_dispatcher = IdDispatcher()
-        self.observation_renderer  = ecto_yolo.ObservationRenderer()
+        self.observation_renderer = ecto_yolo.ObservationRenderer()
 
         self.graph += [
             self.image_mux['K'] >> self.observation_renderer['K'],
@@ -129,12 +144,12 @@ class ObservationRenderer():
     def connect_debug(self):
         self.pose_drawer = PoseDrawer()
 
-
         self.graph += [
             self.observation_renderer['R'] >> MatPrinter(name='R')['mat'],
             self.observation_renderer['T'] >> MatPrinter(name='T')['mat'],
             self.observation_renderer['K'] >> MatPrinter(name='K')['mat'],
-            self.observation_renderer['R', 'T', 'K'] >> self.pose_drawer['R', 'T', 'K'],
+            self.observation_renderer['R', 'T',
+                                      'K'] >> self.pose_drawer['R', 'T', 'K'],
             self.observation_renderer['debug_image'] >> self.pose_drawer['image'],
         ]
 
@@ -157,12 +172,13 @@ class ObservationRenderer():
     def connect_ros_image(self):
         frame_id_str = 'camera_optical_frame'
 
-        self.image2ros = ecto_ros.Mat2Image(frame_id=frame_id_str, encoding='bgr8')
-        self.depth2ros = ecto_ros.Mat2Image(frame_id=frame_id_str, encoding='16UC1')
+        self.image2ros = ecto_ros.Mat2Image(
+            frame_id=frame_id_str, encoding='bgr8')
+        self.depth2ros = ecto_ros.Mat2Image(
+            frame_id=frame_id_str, encoding='16UC1')
 
-        self.image_publisher  = Publisher_Image(topic_name='/image')
-        self.depth_publisher  = Publisher_Image(topic_name='/depth')
-
+        self.image_publisher = Publisher_Image(topic_name='/image')
+        self.depth_publisher = Publisher_Image(topic_name='/depth')
 
         self.graph += [
             self.observation_renderer['image'] >> self.image2ros['image'],
@@ -174,32 +190,68 @@ class ObservationRenderer():
 
     def connect_ros_point_cloud(self):
         self.depthTo3d = calib.DepthTo3d('Depth ~> 3D')
-        self.erode = imgproc.Erode('Mask Erosion', kernel=3) #-> 7x7
-        self.rescale_depth = RescaledRegisteredDepth('Depth scaling') #this is for SXGA mode scale handling.
-        self.point_cloud_transform = PointCloudTransform('Object Space Transform')
+        self.erode = imgproc.Erode('Mask Erosion', kernel=3)  # -> 7x7
+        # this is for SXGA mode scale handling.
+        self.rescale_depth = RescaledRegisteredDepth('Depth scaling')
 
         self.point_cloud_converter = MatToPointCloudXYZRGB('To Point Cloud')
-        self.to_ecto_pcl = ecto_pcl.PointCloudT2PointCloud('converter', format=ecto_pcl.XYZRGB)
+        self.to_ecto_pcl = ecto_pcl.PointCloudT2PointCloud(
+            'converter', format=ecto_pcl.XYZRGB)
 
-        self.point_cloud_transform = PointCloudTransform('Object Space Transform')
         self.cloud2msg = ecto_pcl_ros.PointCloud2Message("cloud2msg")
-        self.cloud_pub = ecto_sensor_msgs.Publisher_PointCloud2("cloud_pub",topic_name='/ecto_pcl/sample_output')
+        self.cloud_pub = ecto_sensor_msgs.Publisher_PointCloud2(
+            "cloud_pub", topic_name='/ecto_pcl/sample_output')
 
         self.graph += [
-          self.observation_renderer['depth', 'image', 'mask'] >> self.rescale_depth['depth', 'image', 'mask'],
-          self.observation_renderer['K'] >> self.rescale_depth['K'],
-          self.rescale_depth['K'] >> self.depthTo3d['K'],
-          self.rescale_depth['depth'] >> self.depthTo3d['depth'],
-          self.depthTo3d['points3d'] >> self.point_cloud_converter['points'],
-          self.observation_renderer['image'] >> self.point_cloud_converter['image'],
-          self.rescale_depth['mask'] >> self.erode['image'],
-          self.erode['image'] >> self.point_cloud_converter['mask'],
-          self.point_cloud_converter['point_cloud'] >> self.to_ecto_pcl['input'],
-          self.to_ecto_pcl['output'] >> self.cloud2msg['input'],
-          self.cloud2msg['output'] >> self.cloud_pub['input'],
+            self.observation_renderer['depth', 'image',
+                                      'mask'] >> self.rescale_depth['depth', 'image', 'mask'],
+            self.observation_renderer['K'] >> self.rescale_depth['K'],
+            self.rescale_depth['K'] >> self.depthTo3d['K'],
+            self.rescale_depth['depth'] >> self.depthTo3d['depth'],
+            self.depthTo3d['points3d'] >> self.point_cloud_converter['points'],
+            self.observation_renderer['image'] >> self.point_cloud_converter['image'],
+            self.rescale_depth['mask'] >> self.erode['image'],
+            self.erode['image'] >> self.point_cloud_converter['mask'],
+            self.point_cloud_converter['point_cloud'] >> self.to_ecto_pcl['input'],
+            self.to_ecto_pcl['output'] >> self.cloud2msg['input'],
+            self.cloud2msg['output'] >> self.cloud_pub['input'],
         ]
 
+    def connect_db_inserter(self):
+        self.couch = couchdb.Server(self.options.db_root)
 
+        self.db = dbtools.init_object_databases(self.couch)
+        sessions = self.db
+
+        session = models.Session()
+        session.object_id = "various"
+        session.bag_id = "none"
+        session.store(self.db)
+
+        session_id = session.id
+        print("Session id: " + session_id)
+        object_id = "test_object_id"
+        db_params = args_to_db_params(self.options)
+
+        db_inserter = ObservationInserter(
+            "db_inserter", object_id=object_id,
+            session_id=session_id, db_params=db_params)
+
+        self.graph += [
+            self.observation_renderer['depth'] >> db_inserter['depth'],
+            self.observation_renderer['R', 'T'] >> db_inserter['R', 'T'],
+            self.observation_renderer['mask'] >> db_inserter['mask'],
+            self.observation_renderer['image'] >> db_inserter['image'],
+            self.id_dispatcher['object_id'] >> db_inserter['object_id'],
+            self.image_ci['K'] >> db_inserter['K'],
+        ]
+
+    def parse_args(self):
+        self.parser = argparse.ArgumentParser(
+            description='Generate observations by 3d rendering.')
+        dbtools.add_db_arguments(self.parser)
+        scheduler_options(self.parser)
+        self.options = self.parser.parse_args()
 
     def do_ecto(self):
 
@@ -211,17 +263,18 @@ class ObservationRenderer():
 
         ecto.view_plasm(plasm)
 
-        parser = argparse.ArgumentParser(description='Generate training data by 3d rendering.')
         # add ecto scheduler args.
-        scheduler_options(parser)
-        options = parser.parse_args()
-        run_plasm(options, plasm, locals=vars())
+        run_plasm(self.options, plasm, locals=vars())
+
 
 if __name__ == '__main__':
     ecto_ros.init(sys.argv, "observation_renderer")
     observation_renderer = ObservationRenderer()
-    observation_renderer.connect_debug()
+    # observation_renderer.connect_debug()
     observation_renderer.connect_ros_pose()
-    #observation_renderer.connect_ros_image()
+
+    # observation_renderer.connect_ros_image()
     observation_renderer.connect_ros_point_cloud()
+    observation_renderer.connect_db_inserter()
+
     observation_renderer.do_ecto()
